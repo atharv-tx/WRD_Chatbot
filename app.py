@@ -3,7 +3,7 @@ import json
 import os
 import requests
 
-# Optional PDF reader
+# ✅ SAFE pdfplumber fallback
 try:
     import pdfplumber
 except:
@@ -12,9 +12,9 @@ except:
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-# ---------------------------------------------------------
+# -------------------------
 # 🌐 LANGUAGE CONFIG
-# ---------------------------------------------------------
+# -------------------------
 
 LANGUAGES = {
     "हिंदी": {
@@ -61,14 +61,14 @@ LANGUAGES = {
     }
 }
 
-# ---------------------------------------------------------
+# -------------------------
 # 1. Load WRD Knowledge Base
-# ---------------------------------------------------------
+# -------------------------
 
 @st.cache_resource
 def load_kb_and_vectorizer():
     if not os.path.exists("wrd_kb.json"):
-        st.error("❌ wrd_kb.json file नहीं मिली।")
+        st.error("❌ wrd_kb.json नहीं मिला।")
         st.stop()
 
     with open("wrd_kb.json", "r", encoding="utf-8") as f:
@@ -102,16 +102,15 @@ def retrieve_context(query, vectorizer, doc_matrix, docs, meta, top_k=3):
 
     for idx in top_idx:
         chunks.append(docs[idx]["text"][:900])
-
         if meta[idx]["type"].lower() == "pdf":
             pdf_sources.append(meta[idx])
 
     return "\n\n----\n\n".join(chunks), pdf_sources
 
 
-# ---------------------------------------------------------
+# -------------------------
 # 2. PDF READER
-# ---------------------------------------------------------
+# -------------------------
 
 def read_uploaded_pdf(uploaded_file):
     if pdfplumber is None:
@@ -127,9 +126,9 @@ def read_uploaded_pdf(uploaded_file):
     return text[:4000]
 
 
-# ---------------------------------------------------------
-# 3. GROQ CLOUD LLM (SAFE + CLEAN)
-# ---------------------------------------------------------
+# -------------------------
+# 3. GROQ CLOUD LLM (ONLY)
+# -------------------------
 
 def ask_llm_cloud(query, context, selected_lang):
     try:
@@ -186,9 +185,9 @@ Question:
         return f"❌ Network Error: {str(e)}"
 
 
-# ---------------------------------------------------------
+# -------------------------
 # 4. STREAMLIT UI
-# ---------------------------------------------------------
+# -------------------------
 
 st.set_page_config(page_title="WRD AI Chatbot", layout="centered")
 
