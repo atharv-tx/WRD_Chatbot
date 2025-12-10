@@ -69,6 +69,10 @@ LANGUAGES = {
 
 @st.cache_resource
 def load_kb_and_vectorizer():
+    if not os.path.exists("wrd_kb.json"):
+        st.error("❌ wrd_kb.json file नहीं मिली।")
+        st.stop()
+
     with open("wrd_kb.json", "r", encoding="utf-8") as f:
         docs = json.load(f)
 
@@ -120,22 +124,27 @@ def read_uploaded_pdf(uploaded_file):
             t = p.extract_text()
             if t:
                 full_text += t + "\n"
+
     return full_text[:4000]
 
 
 # -------------------------
-# 3. CLOUD LLM (GROQ)
+# 3. CLOUD LLM (GROQ) — ✅ SAFE VERSION
 # -------------------------
 
 def ask_llm_cloud(query, context, selected_lang):
+    if "GROQ_API_KEY" not in st.secrets:
+        return "❌ Groq API Key नहीं मिली। कृपया secrets.toml या Streamlit Cloud Secrets में GROQ_API_KEY जोड़ें।"
+
     GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
 
     prompt = f"""
 You are a government information assistant.
 
-Answer in this language: {selected_lang}
+Answer strictly in this language: {selected_lang}.
 Use ONLY the given context.
-Give a long, detailed, step-by-step answer.
+Give a long, detailed, step-by-step informational answer.
+If the answer is not found in the context, clearly say that it is unavailable.
 
 Context:
 {context}
@@ -150,19 +159,37 @@ Question:
     }
 
     payload = {
-        "model": "llama3-70b-8192",
-        "messages": [{"role": "user", "content": prompt}],
+        "model": "llama3-8b-8192",   # ✅ Most stable free Groq model
+        "messages": [
+            {"role": "system", "content": "You are a helpful government assistant."},
+            {"role": "user", "content": prompt}
+        ],
         "temperature": 0.2
     }
 
-    response = requests.post(
-        "https://api.groq.com/openai/v1/chat/completions",
-        headers=headers,
-        json=payload,
-        timeout=60
-    )
+    try:
+        response = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=60
+        )
 
-    return response.json()["choices"][0]["message"]["content"]
+        # ✅ HARD SAFETY CHECK
+        if response.status_code != 200:
+            return f"❌ Groq API HTTP Error {response.status_code}: {response.text}"
+
+        data = response.json()
+
+        # ✅ FINAL SAFETY CHECK
+        if "choices" not in data:
+            return f"❌ Groq Invalid Response: {data}"
+
+        return data["choices"][0]["message"]["content"]
+
+    except Exception as e:
+        return f"❌ Groq API Network Error: {e}"
+
 
 
 # -------------------------
@@ -185,25 +212,28 @@ query = st.text_area(ui["query"], height=140)
 top_k = st.slider("📄 Top Documents", 1, 5, 3)
 
 if st.button(ui["button"]):
-    if uploaded_pdf:
-        context = read_uploaded_pdf(uploaded_pdf)
-        pdf_sources = []
-        st.info(ui["pdf_override"])
+    if not query.strip():
+        st.warning("❗ कृपया प्रश्न लिखें।")
     else:
-        context, pdf_sources = retrieve_context(
-            query, vectorizer, doc_matrix, docs, meta, top_k
-        )
+        if uploaded_pdf:
+            context = read_uploaded_pdf(uploaded_pdf)
+            pdf_sources = []
+            st.info(ui["pdf_override"])
+        else:
+            context, pdf_sources = retrieve_context(
+                query, vectorizer, doc_matrix, docs, meta, top_k
+            )
 
-    with st.spinner(ui["thinking"]):
-        answer = ask_llm_cloud(query, context, selected_lang)
+        with st.spinner(ui["thinking"]):
+            answer = ask_llm_cloud(query, context, selected_lang)
 
-    st.subheader(ui["answer"])
-    st.success(answer)
+        st.subheader(ui["answer"])
+        st.success(answer)
 
-    if not uploaded_pdf:
-        st.subheader(ui["pdf"])
-        for s in pdf_sources:
-            st.markdown(f"✅ **{s['title']}**")
-            st.markdown(f"[{ui['download']}]({s['url']})")
+        if not uploaded_pdf:
+            st.subheader(ui["pdf"])
+            for s in pdf_sources:
+                st.markdown(f"✅ **{s['title']}**")
+                st.markdown(f"[{ui['download']}]({s['url']})")
 
 st.info(ui["info"])
