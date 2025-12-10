@@ -227,7 +227,7 @@ if st.button(ui["button"]):
                 )
 
         with st.spinner(ui["thinking"]):
-            answer = ask_llm_ollama(query, context, selected_lang)
+            answer = ask_llm_cloud(query, context, selected_lang)
 
         st.subheader(ui["answer"])
         st.success(answer)
