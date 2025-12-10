@@ -1,0 +1,7 @@
+streamlit
+requests
+scikit-learn
+pdfplumber
+beautifulsoup4
+lxml
+python-dotenv
