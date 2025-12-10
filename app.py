@@ -133,18 +133,16 @@ def read_uploaded_pdf(uploaded_file):
 # -------------------------
 
 def ask_llm_cloud(query, context, selected_lang):
-    if "GROQ_API_KEY" not in st.secrets:
-        return "❌ Groq API Key नहीं मिली। कृपया secrets.toml या Streamlit Cloud Secrets में GROQ_API_KEY जोड़ें।"
+    try:
+        if "GROQ_API_KEY" not in st.secrets:
+            return "❌ GROQ_API_KEY Cloud Secrets में नहीं मिला।"
 
-    GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
+        GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
 
-    prompt = f"""
-You are a government information assistant.
-
-Answer strictly in this language: {selected_lang}.
+        prompt = f"""
+Answer strictly in this language: {selected_lang}
 Use ONLY the given context.
-Give a long, detailed, step-by-step informational answer.
-If the answer is not found in the context, clearly say that it is unavailable.
+Give a long, detailed answer.
 
 Context:
 {context}
@@ -153,21 +151,20 @@ Question:
 {query}
 """
 
-    headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
-        "Content-Type": "application/json"
-    }
+        headers = {
+            "Authorization": f"Bearer {GROQ_API_KEY}",
+            "Content-Type": "application/json"
+        }
 
-    payload = {
-        "model": "llama3-8b-8192",   # ✅ Most stable free Groq model
-        "messages": [
-            {"role": "system", "content": "You are a helpful government assistant."},
-            {"role": "user", "content": prompt}
-        ],
-        "temperature": 0.2
-    }
+        payload = {
+            "model": "llama-3.1-8b-instant",
+            "messages": [
+                {"role": "system", "content": "You are a helpful government assistant."},
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.2,
+        }
 
-    try:
         response = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
             headers=headers,
@@ -175,20 +172,20 @@ Question:
             timeout=60
         )
 
-        # ✅ HARD SAFETY CHECK
-        if response.status_code != 200:
-            return f"❌ Groq API HTTP Error {response.status_code}: {response.text}"
+        st.write("🔍 Groq HTTP Status:", response.status_code)
+        st.write("🔍 Raw Response:", response.text)
 
         data = response.json()
 
-        # ✅ FINAL SAFETY CHECK
         if "choices" not in data:
             return f"❌ Groq Invalid Response: {data}"
 
         return data["choices"][0]["message"]["content"]
 
     except Exception as e:
-        return f"❌ Groq API Network Error: {e}"
+        return f"❌ Full Network Error: {str(e)}"
+
+
 
 
 
