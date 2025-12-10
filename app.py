@@ -2,7 +2,13 @@ import streamlit as st
 import json
 import os
 import requests
-import pdfplumber
+
+# ✅ SAFE pdfplumber fallback for Streamlit Cloud
+try:
+    import pdfplumber
+except:
+    pdfplumber = None
+
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -106,28 +112,33 @@ def retrieve_context(query, vectorizer, doc_matrix, docs, meta, top_k=3):
 
 
 # -------------------------
-# 2. USER UPLOADED PDF READER
+# 2. USER UPLOADED PDF READER (SAFE MODE)
 # -------------------------
 
 def read_uploaded_pdf(uploaded_file):
+    if pdfplumber is None:
+        return "⚠️ PDF पढ़ने की सुविधा इस सर्वर पर अस्थायी रूप से उपलब्ध नहीं है। कृपया केवल WRD डेटा से प्रश्न पूछें।"
+
     full_text = ""
     with pdfplumber.open(uploaded_file) as pdf:
         for page in pdf.pages:
             text = page.extract_text()
             if text:
                 full_text += text + "\n"
-    return full_text[:3500]   # ✅ safe limit for speed
+
+    return full_text[:3500]
 
 
 # -------------------------
-# 3. Ollama (AUTO CONTINUE)
+# 3. Ollama (LONG + AUTO CONTINUE)
 # -------------------------
 
 def ask_llm_ollama(query, context, selected_lang):
     system_prompt = f"""
 You are a WRD Chhattisgarh assistant.
-Give answer ONLY in this language: {selected_lang}.
+Give a very long, detailed and informative answer ONLY in this language: {selected_lang}.
 Use ONLY the given context.
+Explain procedures, steps, documents, eligibility, and rules in detail.
 If info is not present, clearly say it is unavailable.
 """
 
@@ -141,7 +152,7 @@ If info is not present, clearly say it is unavailable.
                 "options": {
                     "num_predict": 700,
                     "temperature": 0.15,
-                    "top_p": 0.95 
+                    "top_p": 0.95
                 },
             },
             timeout=120,
@@ -170,9 +181,8 @@ Question:
 
     answer = generate_once(full_prompt)
 
-    # ✅ Auto-continue if short or cut
-    if len(answer) < 350:
-        continuation = generate_once("Continue the same answer clearly:")
+    if len(answer) < 900:
+        continuation = generate_once("Continue the same answer in full detail:")
         answer += "\n" + continuation
 
     return answer.strip()
@@ -190,7 +200,6 @@ ui = LANGUAGES[selected_lang]
 st.title(ui["title"])
 st.markdown(ui["desc"])
 
-# ✅ PDF Upload Section (STRICT OVERRIDE)
 uploaded_pdf = st.file_uploader(ui["upload"], type=["pdf"])
 
 try:
@@ -199,7 +208,7 @@ except Exception as e:
     st.error(str(e))
     st.stop()
 
-query = st.text_area(ui["query"], height=120)
+query = st.text_area(ui["query"], height=140)
 top_k = st.slider("📄 Top Documents", 1, 5, 3)
 
 if st.button(ui["button"]):
@@ -208,10 +217,9 @@ if st.button(ui["button"]):
     else:
         with st.spinner(ui["search"]):
 
-            # ✅✅✅ STRICT OVERRIDE MODE
             if uploaded_pdf is not None:
                 context = read_uploaded_pdf(uploaded_pdf)
-                pdf_sources = []   # WRD PDFs पूरी तरह ignore
+                pdf_sources = []
                 st.info(ui["pdf_override"])
             else:
                 context, pdf_sources = retrieve_context(
@@ -224,7 +232,6 @@ if st.button(ui["button"]):
         st.subheader(ui["answer"])
         st.success(answer)
 
-        # ✅ ✅ ✅ ONLY WRD PDFs + DOWNLOAD BUTTON (जब upload नहीं किया हो)
         if uploaded_pdf is None:
             st.subheader(ui["pdf"])
             if pdf_sources:
