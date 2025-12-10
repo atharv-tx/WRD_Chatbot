@@ -5,6 +5,9 @@ _A Real-Data RAG + PDF Upload + Multi-Language AI Assistant for Water Resources 
 
 ## 📌 Project Overview
 
+**Link -- https://wrdchatbot-mthjwubgt62zjtlsbwc4te.streamlit.app/**
+
+
 This project is an **AI-powered chatbot** built using **Streamlit + Ollama + RAG (Retrieval Augmented Generation)** that answers user queries using:
 
 ✅ Official **WRD Chhattisgarh website & PDF documents**  
@@ -158,5 +161,10 @@ GitHub: https://github.com/YourUsername
 This chatbot is for educational & internship demo purposes only.
 
 
-#### LINK --- https://wrdchatbot-3ynp7jhdw4ngmjunsxh9r6.streamlit.app/
+
+
+
+
+
+
 For official government decisions, always consult the official department.
