@@ -3,7 +3,7 @@ import json
 import os
 import requests
 
-# ✅ SAFE pdfplumber fallback
+# Optional PDF reader
 try:
     import pdfplumber
 except:
@@ -12,15 +12,14 @@ except:
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-
-# -------------------------
+# ---------------------------------------------------------
 # 🌐 LANGUAGE CONFIG
-# -------------------------
+# ---------------------------------------------------------
 
 LANGUAGES = {
     "हिंदी": {
         "title": "💧 जल संसाधन विभाग छत्तीसगढ़ – एआई चैटबॉट",
-        "desc": "यह chatbot WRD दस्तावेज़ों और आपके PDF से उत्तर देता है।",
+        "desc": "यह चैटबॉट WRD दस्तावेज़ों और आपके PDF से उत्तर देता है।",
         "query": "✍️ अपना सवाल लिखिए",
         "button": "✅ उत्तर प्राप्त करें",
         "search": "🔎 जानकारी खोजी जा रही है...",
@@ -34,38 +33,37 @@ LANGUAGES = {
     },
     "English": {
         "title": "💧 WRD Chhattisgarh – AI Chatbot",
-        "desc": "This chatbot answers from WRD documents and your uploaded PDF.",
+        "desc": "This chatbot answers using WRD data or your uploaded PDF.",
         "query": "✍️ Enter your question",
         "button": "✅ Get Answer",
-        "search": "🔎 Searching information...",
+        "search": "🔎 Searching documents...",
         "thinking": "🤖 Generating answer...",
         "answer": "🤖 Chatbot Answer:",
         "pdf": "📄 Used WRD PDF Documents:",
         "download": "⬇️ Download PDF",
-        "upload": "➕ Upload your own PDF (optional)",
-        "pdf_override": "✅ Answer is generated from your uploaded PDF.",
+        "upload": "➕ Upload your PDF (optional)",
+        "pdf_override": "✅ Answer generated from your uploaded PDF.",
         "info": "ℹ️ This system is for guidance only."
     },
     "Hinglish": {
         "title": "💧 WRD Chhattisgarh – AI Chatbot",
-        "desc": "Ye chatbot WRD docs aur aapke PDF se answer deta hai.",
+        "desc": "Ye chatbot WRD aur uploaded PDF se answer deta hai.",
         "query": "✍️ Apna sawaal likhiye",
         "button": "✅ Answer Pao",
-        "search": "🔎 Info dhoondi ja rahi hai...",
+        "search": "🔎 Documents search ho rahe hain...",
         "thinking": "🤖 Answer banaya ja raha hai...",
-        "answer": "🤖 Chatbot Answer:",
+        "answer": "🤖 Chatbot ka Answer:",
         "pdf": "📄 Use hue WRD PDF:",
         "download": "⬇️ PDF Download",
-        "upload": "➕ Apna PDF upload karein",
-        "pdf_override": "✅ Answer uploaded PDF se diya gaya hai.",
+        "upload": "➕ Apna PDF Upload Karein",
+        "pdf_override": "✅ Answer sirf uploaded PDF se diya gaya hai.",
         "info": "ℹ️ Ye system sirf guidance ke liye hai."
     }
 }
 
-
-# -------------------------
+# ---------------------------------------------------------
 # 1. Load WRD Knowledge Base
-# -------------------------
+# ---------------------------------------------------------
 
 @st.cache_resource
 def load_kb_and_vectorizer():
@@ -104,45 +102,47 @@ def retrieve_context(query, vectorizer, doc_matrix, docs, meta, top_k=3):
 
     for idx in top_idx:
         chunks.append(docs[idx]["text"][:900])
+
         if meta[idx]["type"].lower() == "pdf":
             pdf_sources.append(meta[idx])
 
     return "\n\n----\n\n".join(chunks), pdf_sources
 
 
-# -------------------------
+# ---------------------------------------------------------
 # 2. PDF READER
-# -------------------------
+# ---------------------------------------------------------
 
 def read_uploaded_pdf(uploaded_file):
     if pdfplumber is None:
-        return "PDF reading not supported on this server."
+        return "❌ PDF reader supported नहीं है।"
 
-    full_text = ""
+    text = ""
     with pdfplumber.open(uploaded_file) as pdf:
-        for p in pdf.pages:
-            t = p.extract_text()
+        for page in pdf.pages:
+            t = page.extract_text()
             if t:
-                full_text += t + "\n"
+                text += t + "\n"
 
-    return full_text[:4000]
+    return text[:4000]
 
 
-# -------------------------
-# 3. CLOUD LLM (GROQ) — ✅ SAFE VERSION
-# -------------------------
+# ---------------------------------------------------------
+# 3. GROQ CLOUD LLM (SAFE + CLEAN)
+# ---------------------------------------------------------
 
 def ask_llm_cloud(query, context, selected_lang):
     try:
         if "GROQ_API_KEY" not in st.secrets:
-            return "❌ GROQ_API_KEY Cloud Secrets में नहीं मिला।"
+            return "❌ GROQ_API_KEY Streamlit Secrets में नहीं मिला।"
 
         GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
 
         prompt = f"""
-Answer strictly in this language: {selected_lang}
+You are an official WRD information assistant.
+Answer strictly in this language: {selected_lang}.
 Use ONLY the given context.
-Give a long, detailed answer.
+Provide a long, detailed, step-by-step answer.
 
 Context:
 {context}
@@ -159,10 +159,10 @@ Question:
         payload = {
             "model": "llama-3.1-8b-instant",
             "messages": [
-                {"role": "system", "content": "You are a helpful government assistant."},
+                {"role": "system", "content": "You are a helpful WRD assistant."},
                 {"role": "user", "content": prompt}
             ],
-            "temperature": 0.2,
+            "temperature": 0.2
         }
 
         response = requests.post(
@@ -172,26 +172,23 @@ Question:
             timeout=60
         )
 
-        st.write("🔍 Groq HTTP Status:", response.status_code)
-        st.write("🔍 Raw Response:", response.text)
-
         data = response.json()
 
+        if response.status_code != 200:
+            return f"❌ Groq API Error {response.status_code}: {data}"
+
         if "choices" not in data:
-            return f"❌ Groq Invalid Response: {data}"
+            return f"❌ Invalid Groq Response: {data}"
 
         return data["choices"][0]["message"]["content"]
 
     except Exception as e:
-        return f"❌ Full Network Error: {str(e)}"
+        return f"❌ Network Error: {str(e)}"
 
 
-
-
-
-# -------------------------
+# ---------------------------------------------------------
 # 4. STREAMLIT UI
-# -------------------------
+# ---------------------------------------------------------
 
 st.set_page_config(page_title="WRD AI Chatbot", layout="centered")
 
@@ -230,7 +227,7 @@ if st.button(ui["button"]):
         if not uploaded_pdf:
             st.subheader(ui["pdf"])
             for s in pdf_sources:
-                st.markdown(f"✅ **{s['title']}**")
+                st.markdown(f"📄 **{s['title']}**")
                 st.markdown(f"[{ui['download']}]({s['url']})")
 
 st.info(ui["info"])
