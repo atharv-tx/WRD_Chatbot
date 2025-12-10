@@ -133,44 +133,22 @@ def read_uploaded_pdf(uploaded_file):
 # 3. Ollama (LONG + AUTO CONTINUE)
 # -------------------------
 
-def ask_llm_ollama(query, context, selected_lang):
-    system_prompt = f"""
-You are a WRD Chhattisgarh assistant.
-Give a very long, detailed and informative answer ONLY in this language: {selected_lang}.
+# -------------------------
+# 3. GROQ CLOUD LLM (ONLY)
+# -------------------------
+
+def ask_llm_cloud(query, context, selected_lang):
+    try:
+        if "GROQ_API_KEY" not in st.secrets:
+            return "❌ GROQ_API_KEY Streamlit Secrets में नहीं मिला।"
+
+        GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
+
+        prompt = f"""
+You are an official WRD information assistant.
+Answer strictly in this language: {selected_lang}.
 Use ONLY the given context.
-Explain procedures, steps, documents, eligibility, and rules in detail.
-If info is not present, clearly say it is unavailable.
-"""
-
-    def generate_once(prompt):
-        resp = requests.post(
-            "http://localhost:11434/api/generate",
-            json={
-                "model": "llama3.1",
-                "prompt": prompt,
-                "stream": True,
-                "options": {
-                    "num_predict": 700,
-                    "temperature": 0.15,
-                    "top_p": 0.95
-                },
-            },
-            timeout=120,
-            stream=True
-        )
-
-        final_text = ""
-        for line in resp.iter_lines(decode_unicode=True):
-            if line:
-                data = json.loads(line)
-                if "response" in data:
-                    final_text += data["response"]
-                if data.get("done"):
-                    break
-        return final_text.strip()
-
-    full_prompt = f"""
-{system_prompt}
+Provide a long, detailed, step-by-step answer.
 
 Context:
 {context}
@@ -179,13 +157,40 @@ Question:
 {query}
 """
 
-    answer = generate_once(full_prompt)
+        headers = {
+            "Authorization": f"Bearer {GROQ_API_KEY}",
+            "Content-Type": "application/json"
+        }
 
-    if len(answer) < 900:
-        continuation = generate_once("Continue the same answer in full detail:")
-        answer += "\n" + continuation
+        payload = {
+            "model": "llama-3.1-8b-instant",
+            "messages": [
+                {"role": "system", "content": "You are a helpful WRD assistant."},
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.2
+        }
 
-    return answer.strip()
+        response = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=60
+        )
+
+        data = response.json()
+
+        if response.status_code != 200:
+            return f"❌ Groq API Error {response.status_code}: {data}"
+
+        if "choices" not in data:
+            return f"❌ Invalid Groq Response: {data}"
+
+        return data["choices"][0]["message"]["content"]
+
+    except Exception as e:
+        return f"❌ Network Error: {str(e)}"
+
 
 
 # -------------------------
