@@ -3,7 +3,7 @@ import json
 import os
 import requests
 
-# ✅ SAFE pdfplumber fallback
+# SAFE pdfplumber fallback
 try:
     import pdfplumber
 except:
@@ -12,79 +12,113 @@ except:
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-# -------------------------
-# 🌐 LANGUAGE CONFIG
-# -------------------------
+
+# -------------------------------------------------------------------
+# GOVT PORTAL UI THEME (INLINE CSS)
+# -------------------------------------------------------------------
+
+st.markdown("""
+<style>
+
+body {
+    background-color: #f1f6fd;
+}
+
+/* Header */
+.govt-header {
+    background-color: #0b3d91;
+    padding: 18px;
+    color: white;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+}
+
+.govt-header img {
+    height: 55px;
+    margin-right: 18px;
+}
+
+.sec-card {
+    background-color: white;
+    padding: 22px;
+    border-radius: 12px;
+    box-shadow: 0px 2px 8px rgba(0,0,0,0.10);
+    margin-bottom: 20px;
+}
+
+.chat-bubble {
+    background: #e9f1ff;
+    padding: 18px;
+    border-radius: 12px;
+    border-left: 6px solid #0b3d91;
+    font-size: 18px;
+}
+
+.pdf-card {
+    background: white;
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 5px solid #0b3d91;
+    margin-bottom: 10px;
+}
+
+.upload-box {
+    border: 2px dashed #0b3d91;
+    padding: 20px;
+    border-radius: 10px;
+    background: #f8fbff;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
+
+# -------------------------------------------------------------------
+# LANGUAGE SETTINGS
+# -------------------------------------------------------------------
 
 LANGUAGES = {
-    "हिंदी": {
-        "title": "💧 जल संसाधन विभाग छत्तीसगढ़ – एआई चैटबॉट",
-        "desc": "यह चैटबॉट WRD दस्तावेज़ों और आपके PDF से उत्तर देता है।",
-        "query": "✍️ अपना सवाल लिखिए",
-        "button": "✅ उत्तर प्राप्त करें",
-        "search": "🔎 जानकारी खोजी जा रही है...",
-        "thinking": "🤖 उत्तर तैयार किया जा रहा है...",
-        "answer": "🤖 चैटबॉट का उत्तर:",
-        "pdf": "📄 उपयोग किए गए WRD PDF दस्तावेज़:",
-        "download": "⬇️ PDF डाउनलोड करें",
-        "upload": "➕ अपना PDF अपलोड करें (वैकल्पिक)",
-        "pdf_override": "✅ उत्तर आपके अपलोड किए गए PDF से तैयार किया गया है।",
-        "info": "ℹ️ यह प्रणाली केवल मार्गदर्शन हेतु है।"
-    },
     "English": {
-        "title": "💧 WRD Chhattisgarh – AI Chatbot",
-        "desc": "This chatbot answers using WRD data or your uploaded PDF.",
         "query": "✍️ Enter your question",
-        "button": "✅ Get Answer",
-        "search": "🔎 Searching documents...",
-        "thinking": "🤖 Generating answer...",
-        "answer": "🤖 Chatbot Answer:",
-        "pdf": "📄 Used WRD PDF Documents:",
-        "download": "⬇️ Download PDF",
-        "upload": "➕ Upload your PDF (optional)",
-        "pdf_override": "✅ Answer generated from your uploaded PDF.",
-        "info": "ℹ️ This system is for guidance only."
+        "button": "Get Answer",
+        "upload": "Upload your own PDF (optional)",
+        "search": "Searching WRD documents...",
+        "thinking": "Generating Answer...",
+        "answer": "Chatbot Answer",
+        "pdf": "WRD Documents Used",
+        "download": "Download PDF",
+        "pdf_override": "Answer taken ONLY from your uploaded PDF.",
     },
-    "Hinglish": {
-        "title": "💧 WRD Chhattisgarh – AI Chatbot",
-        "desc": "Ye chatbot WRD aur uploaded PDF se answer deta hai.",
-        "query": "✍️ Apna sawaal likhiye",
-        "button": "✅ Answer Pao",
-        "search": "🔎 Documents search ho rahe hain...",
-        "thinking": "🤖 Answer banaya ja raha hai...",
-        "answer": "🤖 Chatbot ka Answer:",
-        "pdf": "📄 Use hue WRD PDF:",
-        "download": "⬇️ PDF Download",
-        "upload": "➕ Apna PDF Upload Karein",
-        "pdf_override": "✅ Answer sirf uploaded PDF se diya gaya hai.",
-        "info": "ℹ️ Ye system sirf guidance ke liye hai."
+    "हिंदी": {
+        "query": "✍️ अपना सवाल लिखिए",
+        "button": "उत्तर प्राप्त करें",
+        "upload": "अपना PDF अपलोड करें (वैकल्पिक)",
+        "search": "WRD दस्तावेज़ खोजे जा रहे हैं...",
+        "thinking": "उत्तर तैयार किया जा रहा है...",
+        "answer": "चैटबॉट का उत्तर",
+        "pdf": "उपयोग किए गए WRD PDF",
+        "download": "PDF डाउनलोड करें",
+        "pdf_override": "उत्तर केवल आपके अपलोड किए गए PDF से बनाया गया है।",
     }
 }
 
-# -------------------------
-# 1. Load WRD Knowledge Base
-# -------------------------
+
+# -------------------------------------------------------------------
+# LOAD KNOWLEDGE BASE
+# -------------------------------------------------------------------
 
 @st.cache_resource
 def load_kb_and_vectorizer():
-    if not os.path.exists("wrd_kb.json"):
-        st.error("❌ wrd_kb.json नहीं मिला।")
-        st.stop()
-
     with open("wrd_kb.json", "r", encoding="utf-8") as f:
         docs = json.load(f)
 
     texts = []
     meta = []
-
     for d in docs:
-        combined = f"{d.get('title', '')}\n\n{d.get('text', '')}"
+        combined = f"{d.get('title', '')}\n{d.get('text', '')}"
         texts.append(combined)
-        meta.append({
-            "title": d.get("title", ""),
-            "url": d.get("url", ""),
-            "type": d.get("type", "")
-        })
+        meta.append(d)
 
     vectorizer = TfidfVectorizer()
     doc_matrix = vectorizer.fit_transform(texts)
@@ -93,140 +127,132 @@ def load_kb_and_vectorizer():
 
 
 def retrieve_context(query, vectorizer, doc_matrix, docs, meta, top_k=3):
-    query_vec = vectorizer.transform([query])
-    sims = cosine_similarity(query_vec, doc_matrix)[0]
+    sims = cosine_similarity(vectorizer.transform([query]), doc_matrix)[0]
     top_idx = sims.argsort()[::-1][:top_k]
 
-    chunks = []
-    pdf_sources = []
-
+    chunks, pdf_sources = [], []
     for idx in top_idx:
         chunks.append(docs[idx]["text"][:900])
         if meta[idx]["type"].lower() == "pdf":
             pdf_sources.append(meta[idx])
 
-    return "\n\n----\n\n".join(chunks), pdf_sources
+    return "\n----\n".join(chunks), pdf_sources
 
 
-# -------------------------
-# 2. PDF READER
-# -------------------------
+# -------------------------------------------------------------------
+# PDF READER
+# -------------------------------------------------------------------
 
 def read_uploaded_pdf(uploaded_file):
     if pdfplumber is None:
-        return "❌ PDF reader supported नहीं है।"
-
-    text = ""
+        return "PDF reading is not supported on server."
+    full = ""
     with pdfplumber.open(uploaded_file) as pdf:
-        for page in pdf.pages:
-            t = page.extract_text()
+        for p in pdf.pages:
+            t = p.extract_text()
             if t:
-                text += t + "\n"
+                full += t + "\n"
+    return full[:4000]
 
-    return text[:4000]
 
+# -------------------------------------------------------------------
+# LLM (GROQ Cloud)
+# -------------------------------------------------------------------
 
-# -------------------------
-# 3. GROQ CLOUD LLM (ONLY)
-# -------------------------
+def ask_llm_cloud(query, context, lang):
+    if "GROQ_API_KEY" not in st.secrets:
+        return "❌ GROQ_API_KEY missing in cloud secrets."
 
-def ask_llm_cloud(query, context, selected_lang):
-    try:
-        if "GROQ_API_KEY" not in st.secrets:
-            return "❌ GROQ_API_KEY Streamlit Secrets में नहीं मिला।"
+    key = st.secrets["GROQ_API_KEY"]
 
-        GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
+    prompt = f"""
+Answer ONLY in: {lang}
+Use ONLY this context:
 
-        prompt = f"""
-You are an official WRD information assistant.
-Answer strictly in this language: {selected_lang}.
-Use ONLY the given context.
-Provide a long, detailed, step-by-step answer.
-
-Context:
 {context}
 
-Question:
-{query}
+Give a very detailed, long and structured answer.
 """
 
-        headers = {
-            "Authorization": f"Bearer {GROQ_API_KEY}",
-            "Content-Type": "application/json"
-        }
-
-        payload = {
+    res = requests.post(
+        "https://api.groq.com/openai/v1/chat/completions",
+        headers={"Authorization": f"Bearer {key}"},
+        json={
             "model": "llama-3.1-8b-instant",
-            "messages": [
-                {"role": "system", "content": "You are a helpful WRD assistant."},
-                {"role": "user", "content": prompt}
-            ],
+            "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.2
         }
+    )
 
-        response = requests.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=60
-        )
+    data = res.json()
+    if "choices" not in data:
+        return f"❌ Invalid Groq Response: {data}"
 
-        data = response.json()
-
-        if response.status_code != 200:
-            return f"❌ Groq API Error {response.status_code}: {data}"
-
-        if "choices" not in data:
-            return f"❌ Invalid Groq Response: {data}"
-
-        return data["choices"][0]["message"]["content"]
-
-    except Exception as e:
-        return f"❌ Network Error: {str(e)}"
+    return data["choices"][0]["message"]["content"]
 
 
-# -------------------------
-# 4. STREAMLIT UI
-# -------------------------
+# -------------------------------------------------------------------
+# GOVERNMENT HEADER
+# -------------------------------------------------------------------
 
-st.set_page_config(page_title="WRD AI Chatbot", layout="centered")
+st.markdown("""
+<div class="govt-header">
+    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/55/Emblem_of_India.svg/800px-Emblem_of_India.svg.png">
+    <h2>Water Resources Department, Government of Chhattisgarh</h2>
+</div>
+""", unsafe_allow_html=True)
 
-selected_lang = st.selectbox("🌐 Select Language / भाषा चुनें", list(LANGUAGES.keys()))
-ui = LANGUAGES[selected_lang]
 
-st.title(ui["title"])
-st.markdown(ui["desc"])
+# -------------------------------------------------------------------
+# MAIN UI LAYOUT: TWO COLUMNS (GOVT PORTAL STYLE)
+# -------------------------------------------------------------------
 
-uploaded_pdf = st.file_uploader(ui["upload"], type=["pdf"])
+col1, col2 = st.columns([1, 1])
 
-docs, meta, vectorizer, doc_matrix = load_kb_and_vectorizer()
+with col1:
+    st.markdown("<div class='sec-card'>", unsafe_allow_html=True)
 
-query = st.text_area(ui["query"], height=140)
-top_k = st.slider("📄 Top Documents", 1, 5, 3)
+    lang = st.selectbox("🌐 Language / भाषा", list(LANGUAGES.keys()))
+    ui = LANGUAGES[lang]
 
-if st.button(ui["button"]):
-    if not query.strip():
-        st.warning("❗ कृपया प्रश्न लिखें।")
-    else:
+    query = st.text_area(ui["query"], height=150)
+
+    uploaded_pdf = st.file_uploader(ui["upload"], type=["pdf"])
+
+    top_k = st.slider("📄 Top Documents", 1, 5, 3)
+
+    if st.button(ui["button"]):
         if uploaded_pdf:
             context = read_uploaded_pdf(uploaded_pdf)
-            pdf_sources = []
+            pdf_used = []
             st.info(ui["pdf_override"])
         else:
-            context, pdf_sources = retrieve_context(
-                query, vectorizer, doc_matrix, docs, meta, top_k
-            )
+            context, pdf_used = retrieve_context(query, *load_kb_and_vectorizer(), top_k)
 
         with st.spinner(ui["thinking"]):
-            answer = ask_llm_cloud(query, context, selected_lang)
+            answer = ask_llm_cloud(query, context, lang)
 
+        st.session_state["answer"] = answer
+        st.session_state["pdf_used"] = pdf_used
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+with col2:
+    st.markdown("<div class='sec-card'>", unsafe_allow_html=True)
+
+    if "answer" in st.session_state:
         st.subheader(ui["answer"])
-        st.success(answer)
+        st.markdown(f"<div class='chat-bubble'>{st.session_state['answer']}</div>", unsafe_allow_html=True)
 
-        if not uploaded_pdf:
+        if st.session_state["pdf_used"]:
             st.subheader(ui["pdf"])
-            for s in pdf_sources:
-                st.markdown(f"📄 **{s['title']}**")
-                st.markdown(f"[{ui['download']}]({s['url']})")
+            for p in st.session_state["pdf_used"]:
+                st.markdown(f"""
+                <div class="pdf-card">
+                    <b>{p['title']}</b><br>
+                    <a href="{p['url']}" target="_blank">{ui['download']}</a>
+                </div>
+                """, unsafe_allow_html=True)
 
-st.info(ui["info"])
+    st.markdown("</div>", unsafe_allow_html=True)
