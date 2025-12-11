@@ -103,43 +103,76 @@ def is_meta(q):
 # ----------------------------
 # LOAD KB + PDFs
 # ----------------------------
-@st.cache_resource
+@st.cache_resource(show_spinner=True)
 def load_kb_and_pdfs():
+    import time
+    start = time.time()
+
     docs = []
     meta = []
+
+    MAX_PDF_CHARS = 4000     # small slice → speeds up processing a LOT
+    MAX_DOCS = 50            # optional limit (remove if needed)
 
     # Load KB JSON
     if os.path.exists(KB_FILE):
         with open(KB_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
+
         for d in data:
-            docs.append(d["text"][:10000])
+            txt = d["text"][:MAX_PDF_CHARS]
+            docs.append(txt)
             meta.append({"title": d["title"], "url": d["url"], "type": d["type"]})
 
-    # Load PDFs from both folders
+    # Folders to scan
+    folders = ["pdfs", "wrd_pdfs"]
+
+    # Load PDFs (FAST MODE)
     if pdfplumber:
-        for folder in PDFS_FOLDERS:
+        for folder in folders:
             if os.path.isdir(folder):
                 for fname in os.listdir(folder):
-                    if fname.endswith(".pdf"):
+                    if fname.lower().endswith(".pdf"):
+
+                        if len(docs) >= MAX_DOCS:
+                            break
+
                         path = os.path.join(folder, fname)
                         try:
+                            # Only read first 3 pages for speed
                             with pdfplumber.open(path) as pdf:
-                                pages = [p.extract_text() or "" for p in pdf.pages]
-                            text = "\n".join(pages)
-                            docs.append(text[:10000])
-                            meta.append({"title": fname, "url": path, "type": "pdf"})
-                        except:
-                            pass
+                                pages = []
+                                for i, p in enumerate(pdf.pages):
+                                    if i >= 3:
+                                        break
+                                    pages.append(p.extract_text() or "")
 
-    # Prevent empty vectorizer crash
+                            text = "\n".join(pages)[:MAX_PDF_CHARS]
+
+                            docs.append(text)
+                            meta.append({"title": fname, "url": path, "type": "pdf"})
+
+                        except Exception as e:
+                            print("PDF read error:", path, e)
+
+    # fallback
     if not docs:
         docs = ["No WRD documents found."]
         meta = [{"title": "None", "url": "", "type": "none"}]
 
-    vect = TfidfVectorizer().fit(docs)
-    matrix = vect.transform(docs)
-    return docs, meta, vect, matrix
+    # Vectorizer (FAST MODE)
+    vectorizer = TfidfVectorizer(
+        max_features=5000,          # limit vocabulary → much faster
+        stop_words="english"        # reduces tokens → faster vectorization
+    )
+
+    matrix = vectorizer.fit_transform(docs)
+
+    end = time.time()
+    print(f"✔ Loaded KB + PDFs in {end-start:.2f} seconds")
+
+    return docs, meta, vectorizer, matrix
+
 
 
 # ----------------------------
